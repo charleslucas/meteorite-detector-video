@@ -1,5 +1,4 @@
 output/
-*.pt
 __pycache__/
 *.pyc
 .env
@@ -7,3 +6,5 @@ __pycache__/
 *.mov
 *.avi
 *.mkv
+# Allow committed model weights in models/
+!models/*.pt
