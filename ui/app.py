@@ -57,7 +57,7 @@ def upload():
 
     job_id = uuid.uuid4().hex[:8]
     q = queue.Queue()
-    JOBS[job_id] = {"queue": q, "results": None, "error": None}
+    JOBS[job_id] = {"queue": q, "results": None, "error": None, "stop": False}
 
     threading.Thread(
         target=_run_detection,
@@ -131,10 +131,15 @@ def _run_detection(job_id, video_path, model_name, conf, frame_step, iou, tempor
                     pass
             q.put(msg)
 
-        candidates = detector.process_video(video_path, progress_callback=progress)
+        candidates = detector.process_video(
+            video_path,
+            progress_callback=progress,
+            stop_callback=lambda: JOBS[job_id].get("stop", False),
+        )
+        stopped = JOBS[job_id].get("stop", False)
 
         JOBS[job_id]["results"] = candidates
-        q.put({"type": "complete", "candidates": candidates})
+        q.put({"type": "complete", "candidates": candidates, "stopped": stopped})
 
     except Exception as exc:
         JOBS[job_id]["error"] = str(exc)
@@ -144,6 +149,13 @@ def _run_detection(job_id, video_path, model_name, conf, frame_step, iou, tempor
             os.unlink(video_path)
         except OSError:
             pass
+
+
+@app.route("/api/stop/<job_id>", methods=["POST"])
+def stop_job(job_id):
+    if job_id in JOBS:
+        JOBS[job_id]["stop"] = True
+    return jsonify({"ok": True})
 
 
 @app.route("/api/stream/<job_id>")

@@ -82,7 +82,7 @@ class MeteoriteDetector:
     # Public API
     # ------------------------------------------------------------------
 
-    def process_video(self, video_path, output_path=None, progress_callback=None):
+    def process_video(self, video_path, output_path=None, progress_callback=None, stop_callback=None):
         """
         Process a video file and return a list of deduplicated candidate detections.
 
@@ -126,6 +126,9 @@ class MeteoriteDetector:
         while True:
             ret, frame = cap.read()
             if not ret:
+                break
+            if stop_callback and stop_callback():
+                print("  Detection stopped by user.")
                 break
 
             if frame_num % self.frame_step == 0:

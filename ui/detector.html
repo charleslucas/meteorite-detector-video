@@ -82,6 +82,8 @@ input:focus,select:focus{border-color:var(--accent);}
 .btn-run{background:var(--accent3);color:#000;font-weight:700;}
 .btn-run:hover:not(:disabled){background:#fff;}
 .btn-run:disabled{opacity:.4;cursor:not-allowed;}
+.btn-stop{background:var(--red);color:#fff;font-weight:700;}
+.btn-stop:hover{background:#ff6680;}
 .btn-sec{background:transparent;border:1px solid var(--border);color:var(--dim);}
 .btn-sec:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}
 .btn-sec:disabled{opacity:.3;cursor:not-allowed;}
@@ -211,8 +213,7 @@ canvas{display:block;}
         oninput="document.getElementById('twVal').textContent=this.value">
     </div>
 
-    <button class="btn btn-run" id="btnRun" onclick="runDetection()" disabled>▶ RUN DETECTION</button>
-    <button class="btn btn-sec" id="btnStop" onclick="stopDetection()" disabled>■ STOP</button>
+    <button class="btn btn-run" id="btnRun" onclick="handleRunStop()" disabled>▶ RUN DETECTION</button>
 
     <div class="sec-label c1" style="margin-top:22px">// ABOUT</div>
     <div style="font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--dim);line-height:1.8">
@@ -284,6 +285,8 @@ let animFrame = null;
 let scanLine = 0;
 let framesProcessed = 0;
 let videoMeta = { name: '', duration: 0, size: 0 };
+let isRunning = false;
+let stopFallbackTimer = null;
 
 // ─────────────────────────────────────────────────────────
 //  INIT
@@ -547,6 +550,25 @@ function handleFile(f) {
 // ─────────────────────────────────────────────────────────
 //  DETECTION
 // ─────────────────────────────────────────────────────────
+function handleRunStop() {
+  if (isRunning) stopDetection(); else runDetection();
+}
+
+function setRunning(running) {
+  isRunning = running;
+  const btn = document.getElementById('btnRun');
+  if (running) {
+    btn.textContent = '■ STOP';
+    btn.classList.remove('btn-run');
+    btn.classList.add('btn-stop');
+  } else {
+    btn.textContent = '▶ RUN DETECTION';
+    btn.classList.remove('btn-stop');
+    btn.classList.add('btn-run');
+    btn.disabled = !videoFile;
+  }
+}
+
 async function runDetection() {
   if (!videoFile) return;
 
@@ -555,8 +577,7 @@ async function runDetection() {
   startTime = Date.now();
 
   setProgress(0, 'UPLOADING VIDEO...');
-  document.getElementById('btnRun').disabled = true;
-  document.getElementById('btnStop').disabled = false;
+  setRunning(true);
   document.getElementById('detList').innerHTML = '<div class="det-empty">Processing…</div>';
   ['dHi','dMd','dTot','dFrm'].forEach(id => document.getElementById(id).textContent = '0');
   ['btnGeo','btnCSV','btnGPX'].forEach(id => document.getElementById(id).disabled = true);
@@ -611,8 +632,9 @@ async function runDetection() {
       }
     } else if (msg.type === 'complete') {
       currentES.close(); currentES = null;
+      if (stopFallbackTimer) { clearTimeout(stopFallbackTimer); stopFallbackTimer = null; }
       candidates = msg.candidates || [];
-      onComplete(candidates);
+      onComplete(candidates, msg.stopped);
     } else if (msg.type === 'error') {
       currentES.close(); currentES = null;
       onError(msg.message);
@@ -626,21 +648,27 @@ async function runDetection() {
 }
 
 function stopDetection() {
-  if (currentES) { currentES.close(); currentES = null; }
-  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
-  currentJobId = null;
-  document.getElementById('btnRun').disabled = !videoFile;
-  document.getElementById('btnStop').disabled = true;
-  setProgress(0, 'STOPPED');
-  initCanvas();
+  if (!currentJobId) return;
+  setProgress(null, 'STOPPING — waiting for current frame...');
+  fetch(`/api/stop/${currentJobId}`, { method: 'POST' }).catch(() => {});
+  // Keep SSE open so partial results arrive via the complete event.
+  // Fallback: force-close after 8s if backend doesn't respond.
+  if (stopFallbackTimer) clearTimeout(stopFallbackTimer);
+  stopFallbackTimer = setTimeout(() => {
+    if (currentES) { currentES.close(); currentES = null; }
+    setRunning(false);
+    setProgress(0, 'STOPPED');
+    if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+    initCanvas();
+  }, 8000);
 }
 
-function onComplete(cands) {
+function onComplete(cands, stopped) {
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
-  document.getElementById('btnRun').disabled = !videoFile;
-  document.getElementById('btnStop').disabled = true;
+  setRunning(false);
 
-  setProgress(100, `COMPLETE — ${cands.length} CANDIDATE${cands.length !== 1 ? 'S' : ''} FOUND`);
+  const word = stopped ? 'STOPPED' : 'COMPLETE';
+  setProgress(stopped ? undefined : 100, `${word} — ${cands.length} CANDIDATE${cands.length !== 1 ? 'S' : ''} FOUND`);
   document.getElementById('hudFrame').textContent = String(framesProcessed);
   document.getElementById('dFrm').textContent = framesProcessed;
 
@@ -680,8 +708,8 @@ function onComplete(cands) {
 
 function onError(msg) {
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
-  document.getElementById('btnRun').disabled = !videoFile;
-  document.getElementById('btnStop').disabled = true;
+  if (stopFallbackTimer) { clearTimeout(stopFallbackTimer); stopFallbackTimer = null; }
+  setRunning(false);
   setProgress(0, 'ERROR: ' + msg);
   const c = document.getElementById('mainCanvas');
   const ctx = c.getContext('2d');
@@ -742,9 +770,11 @@ function exportGPX() {
 //  UTILITIES
 // ─────────────────────────────────────────────────────────
 function setProgress(pct, lbl) {
-  document.getElementById('progFill').style.width = pct + '%';
-  document.getElementById('progLbl').textContent = lbl;
-  document.getElementById('progPct').textContent = Math.round(pct) + '%';
+  if (pct != null) {
+    document.getElementById('progFill').style.width = pct + '%';
+    document.getElementById('progPct').textContent = Math.round(pct) + '%';
+  }
+  if (lbl != null) document.getElementById('progLbl').textContent = lbl;
 }
 
 function formatTime(s) {
