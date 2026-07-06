@@ -14,21 +14,30 @@ and outputs timestamped candidate detections for ground follow-up.
 ```
 meteorite-detector-video/
   processor/       - Core video processing and detection logic
-  ui/              - Streamlit interface for running and reviewing detections
-  models/          - Symlink or pointer to trained model weights
+  ui/              - Flask web UI for running and reviewing detections
+  models/          - Trained model weights (stored via Git LFS)
   output/          - Detection results (gitignored)
 ```
 
 ## Usage
 
 ```bash
-# Process a video file
-python processor/detect.py --video path/to/survey.mp4
+# Launch the Flask UI
+python ui/app.py
 
-# Launch the Streamlit UI
-streamlit run ui/app.py
+# Process a video file directly
+python processor/detect.py --video path/to/survey.mp4
 ```
 
 ## Requirements
 
-See `requirements.txt`. Shares the YOLOv8 model with the parent meteorai repo.
+**System prerequisites:**
+- [Git LFS](https://git-lfs.com) — required to download the model weights (`models/best.pt`).
+  Install it, then run `git lfs pull` inside this directory if the model file is missing.
+  Without it, `models/best.pt` will be a small text pointer file instead of the actual model.
+
+**Python packages:** see `requirements.txt`
+
+```bash
+pip install -r requirements.txt
+```
