@@ -2,6 +2,7 @@
 Meteorite Detector Video — Flask UI
 Run: python ui/app.py
 """
+import base64
 import json
 import os
 import queue
@@ -67,7 +68,17 @@ def upload():
     return jsonify({"job_id": job_id})
 
 
+_CLASS_COLORS_BGR = {
+    "meteorite":       (50,  255,  50),   # green
+    "fusion_crust":    (0,   140, 255),   # orange
+    "regmaglypts":     (0,   220, 220),   # yellow
+    "metal_flake":     (255, 200,   0),   # cyan-blue
+    "scale_reference": (120, 120, 120),   # gray
+}
+
+
 def _run_detection(job_id, video_path, model_name, conf, frame_step, iou, temporal_window):
+    import cv2
     q = JOBS[job_id]["queue"]
     try:
         from processor.detect import MeteoriteDetector
@@ -84,10 +95,41 @@ def _run_detection(job_id, video_path, model_name, conf, frame_step, iou, tempor
             temporal_window=temporal_window,
         )
 
-        def progress(frame_num, total):
+        def progress(frame_num, total, frame=None, hits=None, running_candidates=None):
             pct = min(frame_num / max(total, 1) * 85, 85)
-            q.put({"type": "progress", "pct": round(pct, 1),
-                   "frame": frame_num, "total": total})
+            msg = {"type": "progress", "pct": round(pct, 1),
+                   "frame": frame_num, "total": total}
+            if running_candidates is not None:
+                msg["cand_total"] = len(running_candidates)
+                msg["cand_hi"] = sum(1 for c in running_candidates if c["confidence"] > 0.75)
+                msg["cand_md"] = sum(1 for c in running_candidates if 0.5 <= c["confidence"] <= 0.75)
+            if frame is not None:
+                try:
+                    h, w = frame.shape[:2]
+                    target_w = 854
+                    scale = target_w / w if w > target_w else 1.0
+                    thumb = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1.0 else frame.copy()
+                    if hits:
+                        sw, sh = thumb.shape[1] / w, thumb.shape[0] / h
+                        for hit in hits:
+                            bx, by, bw, bh = hit["bbox"]
+                            tx, ty, tw, th = int(bx*sw), int(by*sh), int(bw*sw), int(bh*sh)
+                            color = _CLASS_COLORS_BGR.get(hit["label"], (200, 200, 200))
+                            cv2.rectangle(thumb, (tx, ty), (tx+tw, ty+th), color, 2)
+                            cv2.putText(thumb, f"{hit['label']} {hit['confidence']:.0%}",
+                                        (tx, max(ty-6, 14)), cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.45, color, 1, cv2.LINE_AA)
+                    _, buf = cv2.imencode(".jpg", thumb, [cv2.IMWRITE_JPEG_QUALITY, 72])
+                    encoded = base64.b64encode(buf.tobytes()).decode("ascii")
+                    msg["frame_data"] = encoded
+                    # Store thumbnail on any candidate last seen this frame
+                    if running_candidates:
+                        for cand in running_candidates:
+                            if cand["last_frame"] == frame_num:
+                                cand["thumbnail"] = encoded
+                except Exception:
+                    pass
+            q.put(msg)
 
         candidates = detector.process_video(video_path, progress_callback=progress)
 
@@ -136,7 +178,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     url = f"http://127.0.0.1:{args.port}"
-    print(f"\nMeteoriteDetector UI  →  {url}\n")
+    print(f"\nMeteoriteDetector UI  ->  {url}\n")
 
     if not args.no_browser:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()

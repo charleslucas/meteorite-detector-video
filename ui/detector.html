@@ -120,7 +120,9 @@ canvas{display:block;}
   font-size:.62rem;color:var(--dim);}
 .det-card{background:var(--deep);border:1px solid var(--border);padding:10px;
   margin-bottom:6px;position:relative;transition:border-color .2s;}
+.det-card{cursor:pointer;}
 .det-card:hover{border-color:rgba(127,255,0,.4);}
+.det-card.selected{border-color:var(--accent3);background:rgba(127,255,0,.04);}
 .det-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;}
 .det-card.hi::before{background:var(--red);}
 .det-card.md::before{background:var(--accent2);}
@@ -184,8 +186,8 @@ canvas{display:block;}
     </div>
 
     <div class="fg">
-      <label>Confidence: <span class="range-val" id="confVal">25%</span></label>
-      <input type="range" id="confR" min="5" max="95" value="25"
+      <label>Confidence: <span class="range-val" id="confVal">70%</span></label>
+      <input type="range" id="confR" min="5" max="95" value="70"
         oninput="document.getElementById('confVal').textContent=this.value+'%'">
     </div>
 
@@ -203,9 +205,9 @@ canvas{display:block;}
     </div>
 
     <div class="fg">
-      <label>Temporal window: <span class="range-val" id="twVal">15</span>
+      <label>Temporal window: <span class="range-val" id="twVal">60</span>
         <span style="font-size:.58rem;color:var(--dim)"> frames</span></label>
-      <input type="range" id="twR" min="5" max="60" value="15"
+      <input type="range" id="twR" min="5" max="150" value="60"
         oninput="document.getElementById('twVal').textContent=this.value">
     </div>
 
@@ -398,6 +400,87 @@ function animateScan() {
   animFrame = requestAnimationFrame(animateScan);
 }
 
+function drawVideoFrame(b64) {
+  const c = document.getElementById('mainCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  const img = new Image();
+  img.onload = () => {
+    ctx.fillStyle = '#060a14';
+    ctx.fillRect(0, 0, W, H);
+    const scale = Math.min(W / img.width, H / img.height);
+    const dx = (W - img.width * scale) / 2;
+    const dy = (H - img.height * scale) / 2;
+    ctx.drawImage(img, dx, dy, img.width * scale, img.height * scale);
+    // Corner brackets
+    const bS = 24;
+    ctx.strokeStyle = 'rgba(0,212,255,.5)';
+    ctx.lineWidth = 2;
+    [[20,20],[W-20,20],[20,H-20],[W-20,H-20]].forEach(([bx, by]) => {
+      const sx = bx < W/2 ? bS : -bS, sy = by < H/2 ? bS : -bS;
+      ctx.beginPath(); ctx.moveTo(bx+sx, by); ctx.lineTo(bx, by); ctx.lineTo(bx, by+sy); ctx.stroke();
+    });
+    const elapsed = startTime ? ((Date.now() - startTime) / 1000).toFixed(1) : '—';
+    document.getElementById('hudTime').textContent = elapsed + 's';
+  };
+  img.src = 'data:image/jpeg;base64,' + b64;
+}
+
+function showCandidateFrame(idx) {
+  const cand = candidates[idx];
+  if (!cand) return;
+
+  // Highlight selected card
+  document.querySelectorAll('.det-card').forEach((el, i) => {
+    el.classList.toggle('selected', i === idx);
+  });
+
+  if (!cand.thumbnail) return;
+
+  // Stop any running animation
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+
+  const label = `CAND-${String(idx+1).padStart(3,'0')} · ${cand.label.toUpperCase()} · ${(cand.confidence*100).toFixed(1)}%`;
+  document.getElementById('hudFrame').textContent = label;
+  document.getElementById('hudTime').textContent = formatTime(cand.timestamp_s);
+
+  const c = document.getElementById('mainCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  const img = new Image();
+  img.onload = () => {
+    ctx.fillStyle = '#060a14';
+    ctx.fillRect(0, 0, W, H);
+    const scale = Math.min(W / img.width, H / img.height);
+    const dx = (W - img.width * scale) / 2;
+    const dy = (H - img.height * scale) / 2;
+    ctx.drawImage(img, dx, dy, img.width * scale, img.height * scale);
+
+    // Corner brackets
+    const bS = 24;
+    ctx.strokeStyle = 'rgba(127,255,0,.6)';
+    ctx.lineWidth = 2;
+    [[20,20],[W-20,20],[20,H-20],[W-20,H-20]].forEach(([bx, by]) => {
+      const sx = bx < W/2 ? bS : -bS, sy = by < H/2 ? bS : -bS;
+      ctx.beginPath(); ctx.moveTo(bx+sx, by); ctx.lineTo(bx, by); ctx.lineTo(bx, by+sy); ctx.stroke();
+    });
+
+    // Label banner at bottom
+    ctx.fillStyle = 'rgba(5,8,16,.88)';
+    ctx.fillRect(0, H - 40, W, 40);
+    ctx.font = '11px "Share Tech Mono"';
+    ctx.fillStyle = 'var(--accent3)';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, 16, H - 22);
+    ctx.fillStyle = 'var(--accent)';
+    ctx.fillText(`T: ${formatTime(cand.timestamp_s)}  |  frames: ${cand.first_frame}–${cand.last_frame}  |  seen ${cand.frame_count}×`, 16, H - 8);
+    ctx.fillStyle = 'rgba(74,96,128,.9)';
+    ctx.textAlign = 'right';
+    ctx.fillText(`#${idx+1} of ${candidates.length}`, W - 16, H - 8);
+  };
+  img.src = 'data:image/jpeg;base64,' + cand.thumbnail;
+}
+
 function drawComplete(candidateCount) {
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
   const c = document.getElementById('mainCanvas');
@@ -516,6 +599,16 @@ async function runDetection() {
       document.getElementById('hudFrame').textContent = `${framesProcessed} / ${total}`;
       document.getElementById('dFrm').textContent = framesProcessed;
       setProgress(msg.pct, `SCANNING FRAME ${framesProcessed} / ${total}`);
+      if (msg.cand_total !== undefined) {
+        document.getElementById('dTot').textContent = msg.cand_total;
+        document.getElementById('dHi').textContent = msg.cand_hi;
+        document.getElementById('dMd').textContent = msg.cand_md;
+        document.getElementById('hudCands').textContent = msg.cand_total;
+      }
+      if (msg.frame_data) {
+        if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+        drawVideoFrame(msg.frame_data);
+      }
     } else if (msg.type === 'complete') {
       currentES.close(); currentES = null;
       candidates = msg.candidates || [];
@@ -567,7 +660,8 @@ function onComplete(cands) {
     document.getElementById('detList').innerHTML = cands.map((c, i) => {
       const cls = c.confidence > 0.75 ? 'hi' : c.confidence >= 0.5 ? 'md' : 'lo';
       const ts = formatTime(c.timestamp_s);
-      return `<div class="det-card ${cls}">
+      const hasThumb = c.thumbnail ? '' : ' style="opacity:.5"';
+      return `<div class="det-card ${cls}" onclick="showCandidateFrame(${i})" title="${c.thumbnail ? 'Click to view frame' : 'No frame captured'}">
         <div class="det-top">
           <div class="det-id">CAND-${String(i+1).padStart(3,'0')} · ${c.label.toUpperCase()}</div>
           <div class="det-conf ${cls}">${(c.confidence*100).toFixed(1)}%</div>
@@ -577,6 +671,7 @@ function onComplete(cands) {
           bbox: ${c.bbox[0]},${c.bbox[1]} ${c.bbox[2]}×${c.bbox[3]}
         </div>
         <div class="conf-bar"><div class="conf-fill ${cls}" style="width:${c.confidence*100}%"></div></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:var(--dim);margin-top:5px"${hasThumb}>▶ click to view frame</div>
       </div>`;
     }).join('');
     ['btnGeo','btnCSV','btnGPX'].forEach(id => document.getElementById(id).disabled = false);

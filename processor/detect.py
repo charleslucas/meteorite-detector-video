@@ -35,7 +35,7 @@ class MeteoriteDetector:
         conf_threshold: float = 0.25,
         frame_step: int = 5,
         iou_threshold: float = 0.5,
-        temporal_window: int = 15,
+        temporal_window: int = 60,
     ):
         """
         Args:
@@ -120,7 +120,7 @@ class MeteoriteDetector:
         print(f"Video: {video_path.name}  {width}x{height}  {fps:.0f}fps  {total} frames")
         print(f"Processing ~{total // self.frame_step} sampled frames...")
 
-        raw_detections = []   # all per-frame hits
+        candidates = []   # running deduplicated list
         frame_num = 0
 
         while True:
@@ -130,15 +130,15 @@ class MeteoriteDetector:
 
             if frame_num % self.frame_step == 0:
                 hits = self._run_inference(frame, frame_num, fps)
-                raw_detections.extend(hits)
+                self._merge_hits(candidates, hits)
 
                 if writer is not None:
                     self._draw_detections(frame, hits)
 
                 if progress_callback:
-                    progress_callback(frame_num, total)
+                    progress_callback(frame_num, total, frame, hits, candidates)
                 elif frame_num % (self.frame_step * 30) == 0:
-                    print(f"  Frame {frame_num}/{total}  detections so far: {len(raw_detections)}")
+                    print(f"  Frame {frame_num}/{total}  candidates so far: {len(candidates)}")
 
             if writer is not None:
                 writer.write(frame)
@@ -149,9 +149,7 @@ class MeteoriteDetector:
         if writer:
             writer.release()
 
-        candidates = self._deduplicate(raw_detections)
-
-        print(f"\nComplete: {len(raw_detections)} raw hits -> {len(candidates)} candidates")
+        print(f"\nComplete: {len(candidates)} candidates")
         return candidates
 
     def save_results(self, candidates, video_path, output_dir=None):
@@ -226,23 +224,14 @@ class MeteoriteDetector:
         union = aw*ah + bw*bh - inter
         return inter / union if union > 0 else 0.0
 
-    def _deduplicate(self, raw):
-        """
-        Merge detections of the same object across nearby frames.
-        Groups hits that overlap (IoU > threshold) within a temporal window.
-        Returns one candidate per unique ground object.
-        """
-        if not raw:
-            return []
-
-        candidates = []
-        for det in raw:
+    def _merge_hits(self, candidates, hits):
+        """Merge a frame's hits into the running candidates list (incremental dedup)."""
+        for det in hits:
             merged = False
             for cand in candidates:
                 if (det["frame"] - cand["last_frame"] <= self.temporal_window
                         and det["label"] == cand["label"]
                         and self._iou(det["bbox"], cand["bbox"]) >= self.iou_threshold):
-                    # Update the candidate with the highest-confidence bbox
                     if det["confidence"] > cand["confidence"]:
                         cand["bbox"]       = det["bbox"]
                         cand["confidence"] = det["confidence"]
@@ -260,4 +249,3 @@ class MeteoriteDetector:
                     "confidence":  det["confidence"],
                     "frame_count": 1,
                 })
-        return candidates
