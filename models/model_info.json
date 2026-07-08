@@ -1,6 +1,38 @@
 {
-  "released_at": "2026-07-06T18:09:54.861171Z",
-  "tag": "v1.1",
-  "source_model": "C:\\Users\\charl\\meteorai\\training\\runs\\meteorite_detector\\weights\\best.pt",
-  "map50": null
+  "released_at": "2026-07-08T01:07:00Z",
+  "tag": "v1.2",
+  "default_model": "best.pt",
+  "map50": 0.981,
+  "models": {
+    "best.pt": {
+      "description": "Default model — all meteorites including mock, with negatives (alias for all_meteorites_inc_mock_v1.2.pt)",
+      "map50": 0.981,
+      "map50_95": 0.933,
+      "dataset": "all, inc. mock, exc. sectioned, inc. negatives"
+    },
+    "all_meteorites_inc_mock_v1.2.pt": {
+      "description": "All meteorites including mock, with negatives",
+      "map50": 0.981,
+      "map50_95": 0.933,
+      "dataset": "all, inc. mock, exc. sectioned, inc. negatives"
+    },
+    "all_meteorites_no_mock_v1.2.pt": {
+      "description": "All meteorites excluding mock, with negatives",
+      "map50": 0.986,
+      "map50_95": 0.929,
+      "dataset": "all, exc. mock, exc. sectioned, inc. negatives"
+    },
+    "in_situ_inc_mock_v1.2.pt": {
+      "description": "In-situ meteorites including mock, with negatives",
+      "map50": 0.732,
+      "map50_95": 0.555,
+      "dataset": "in-situ only, inc. mock, exc. sectioned, inc. negatives"
+    },
+    "in_situ_no_mock_v1.2.pt": {
+      "description": "In-situ meteorites excluding mock, with negatives",
+      "map50": 0.729,
+      "map50_95": 0.557,
+      "dataset": "in-situ only, exc. mock, exc. sectioned, inc. negatives"
+    }
+  }
 }
