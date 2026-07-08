@@ -5,31 +5,31 @@
   "map50": 0.981,
   "models": {
     "best.pt": {
-      "description": "Default model — all meteorites including mock, with negatives (alias for all_meteorites_inc_mock_v1.2.pt)",
+      "description": "Default - all meteorites inc. mock, with negatives",
       "map50": 0.981,
       "map50_95": 0.933,
       "dataset": "all, inc. mock, exc. sectioned, inc. negatives"
     },
     "all_meteorites_inc_mock_v1.2.pt": {
-      "description": "All meteorites including mock, with negatives",
+      "description": "All meteorites inc. mock, with negatives",
       "map50": 0.981,
       "map50_95": 0.933,
       "dataset": "all, inc. mock, exc. sectioned, inc. negatives"
     },
     "all_meteorites_no_mock_v1.2.pt": {
-      "description": "All meteorites excluding mock, with negatives",
+      "description": "All meteorites exc. mock, with negatives",
       "map50": 0.986,
       "map50_95": 0.929,
       "dataset": "all, exc. mock, exc. sectioned, inc. negatives"
     },
     "in_situ_inc_mock_v1.2.pt": {
-      "description": "In-situ meteorites including mock, with negatives",
+      "description": "In-situ only, inc. mock, with negatives",
       "map50": 0.732,
       "map50_95": 0.555,
       "dataset": "in-situ only, inc. mock, exc. sectioned, inc. negatives"
     },
     "in_situ_no_mock_v1.2.pt": {
-      "description": "In-situ meteorites excluding mock, with negatives",
+      "description": "In-situ only, exc. mock, with negatives",
       "map50": 0.729,
       "map50_95": 0.557,
       "dataset": "in-situ only, exc. mock, exc. sectioned, inc. negatives"

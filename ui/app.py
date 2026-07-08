@@ -34,7 +34,7 @@ def model_info():
     meta = MODELS_DIR / "model_info.json"
     model_files = sorted(MODELS_DIR.glob("*.pt"), key=lambda p: (p.name != "best.pt", p.name)) \
         if MODELS_DIR.exists() else []
-    info = json.loads(meta.read_text()) if meta.exists() else {}
+    info = json.loads(meta.read_text(encoding="utf-8")) if meta.exists() else {}
     models_meta = info.get("models", {})
     info["models"] = [
         {
