@@ -319,8 +319,10 @@ async function loadModelInfo() {
     if (_modelData.length) {
       const sel = document.getElementById('selModel');
       sel.innerHTML = _modelData.map(m => {
-        const label = m.description ? `${m.name} — ${m.description}` : m.name;
-        return `<option value="${m.name}">${label}</option>`;
+        const name  = (typeof m === 'object' && m !== null) ? m.name  : m;
+        const desc  = (typeof m === 'object' && m !== null) ? m.description : '';
+        const label = desc ? `${name} — ${desc}` : name;
+        return `<option value="${name}">${label}</option>`;
       }).join('');
       sel.addEventListener('change', () => updateModelInfoPanel(sel.value));
     }
