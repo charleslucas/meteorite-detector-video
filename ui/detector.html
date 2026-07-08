@@ -297,22 +297,36 @@ window.addEventListener('load', () => {
   window.addEventListener('resize', initCanvas);
 });
 
+let _modelData = [];
+let _releaseInfo = {};
+
+function updateModelInfoPanel(modelName) {
+  const m = _modelData.find(x => x.name === modelName) || _modelData[0];
+  document.getElementById('modelInfoPanel').innerHTML =
+    `<span class="mi-key">MODEL </span>${m ? m.name : '—'}<br>` +
+    (m && m.description ? `<span class="mi-key">      </span>${m.description}<br>` : '') +
+    `<span class="mi-key">mAP50 </span>${m && m.map50 != null ? (m.map50 * 100).toFixed(1) + '%' : '—'}<br>` +
+    `<span class="mi-key">RELEASED </span>${_releaseInfo.released_at ? _releaseInfo.released_at.slice(0,10) : '—'}`;
+}
+
 async function loadModelInfo() {
   try {
     const r = await fetch('/api/model-info');
     const d = await r.json();
-    // Populate model selector
-    if (d.models && d.models.length) {
+    _modelData = d.models || [];
+    _releaseInfo = d;
+    // Populate model selector with descriptive labels
+    if (_modelData.length) {
       const sel = document.getElementById('selModel');
-      sel.innerHTML = d.models.map(m => `<option value="${m}">${m}</option>`).join('');
+      sel.innerHTML = _modelData.map(m => {
+        const label = m.description ? `${m.name} — ${m.description}` : m.name;
+        return `<option value="${m.name}">${label}</option>`;
+      }).join('');
+      sel.addEventListener('change', () => updateModelInfoPanel(sel.value));
     }
-    // Update model info panel
-    document.getElementById('modelInfoPanel').innerHTML =
-      `<span class="mi-key">MODEL </span>${d.models?.[0] || '—'}<br>` +
-      `<span class="mi-key">mAP50 </span>${d.map50 != null ? (d.map50 * 100).toFixed(1) + '%' : '—'}<br>` +
-      `<span class="mi-key">RELEASED </span>${d.released_at ? d.released_at.slice(0,10) : '—'}`;
-    // Update header pill
-    if (d.models && d.models.length) {
+    // Update info panel and header pill
+    updateModelInfoPanel(_modelData[0]?.name);
+    if (_modelData.length) {
       document.getElementById('modelPillTxt').textContent = 'MODEL READY';
       document.querySelector('.pill-green .dot').style.cssText = '';
     } else {

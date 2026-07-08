@@ -32,9 +32,18 @@ def index():
 @app.route("/api/model-info")
 def model_info():
     meta = MODELS_DIR / "model_info.json"
-    models = sorted(MODELS_DIR.glob("*.pt")) if MODELS_DIR.exists() else []
+    model_files = sorted(MODELS_DIR.glob("*.pt"), key=lambda p: (p.name != "best.pt", p.name)) \
+        if MODELS_DIR.exists() else []
     info = json.loads(meta.read_text()) if meta.exists() else {}
-    info["models"] = [m.name for m in models]
+    models_meta = info.get("models", {})
+    info["models"] = [
+        {
+            "name": m.name,
+            "description": models_meta.get(m.name, {}).get("description", ""),
+            "map50": models_meta.get(m.name, {}).get("map50"),
+        }
+        for m in model_files
+    ]
     return jsonify(info)
 
 
